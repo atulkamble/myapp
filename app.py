@@ -6,7 +6,7 @@ app = Flask(__name__)
 def home():
     return """
     <h1>Azure Blue-Green Deployment</h1>
-    <h2>Version: GREEN - V2</h2>
+    <h2>Version: BLUE - V1</h2>
     <p>Application is running successfully.</p>
     """
 
