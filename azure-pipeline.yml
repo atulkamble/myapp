@@ -1,232 +1,185 @@
-# azure-pipelines.yml
-
 trigger:
   - main
 
 pool:
-  vmImage: 'ubuntu-latest'
-
+  vmImage: "ubuntu-latest"
 
 variables:
-
-  azureServiceConnection: 'azureconnection'
-
-  resourceGroupName: 'myRG'
-
-  webAppName: 'mypythonapp98600'
-
-  slotName: 'green'
-
-  pythonVersion: '3.14'
-
+  azureServiceConnection: "azureconnection"
+  resourceGroupName: "myRG"
+  webAppName: "mypythonapp98600"
+  slotName: "green"
+  pythonVersion: "3.14"
 
 stages:
+  # -------------------------------------------------------
+  # Stage 1 - Build Python Application
+  # -------------------------------------------------------
 
+  - stage: Build
+    displayName: "Build Python Application"
 
-# -------------------------------------------------------
-# Stage 1 - Build Python Application
-# -------------------------------------------------------
+    jobs:
+      - job: BuildApp
+        displayName: "Build Application"
+        steps:
+          # Checkout Code
+          - checkout: self
 
-- stage: Build
-  displayName: 'Build Python Application'
+          # Python Version
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "$(pythonVersion)"
+            displayName: "Use Python $(pythonVersion)"
 
-  jobs:
+          # Install Dependencies
 
-    - job: BuildApp
-      displayName: 'Build Application'
+          - script: |
+              python --version
+              pip --version
+              pip install -r requirements.txt
+            displayName: "Install Dependencies"
 
-      steps:
+          # Create ZIP Package
 
+          - task: ArchiveFiles@2
+            inputs:
+              rootFolderOrFile: "$(System.DefaultWorkingDirectory)"
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/app.zip"
+              replaceExistingArchive: true
+            displayName: "Create Application ZIP"
 
-        # Checkout Code
+          # Publish Artifact
 
-        - checkout: self
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: "$(Build.ArtifactStagingDirectory)/app.zip"
+              artifact: "pythonapp"
+            displayName: "Publish Artifact"
 
+  # -------------------------------------------------------
+  # Stage 2 - Deploy to Green Slot
+  # -------------------------------------------------------
 
-        # Python Version
+  - stage: DeployGreen
+    displayName: "Deploy to Green Slot"
 
-        - task: UsePythonVersion@0
-          inputs:
-            versionSpec: '$(pythonVersion)'
-          displayName: 'Use Python $(pythonVersion)'
+    dependsOn: Build
 
+    jobs:
+      - deployment: DeployGreenSlot
+        displayName: "Deploy Green Version"
 
-        # Install Dependencies
+        environment: "green"
 
-        - script: |
-            python --version
-            pip --version
-            pip install -r requirements.txt
-          displayName: 'Install Dependencies'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Download Build Artifact
 
+                - task: DownloadPipelineArtifact@2
+                  inputs:
+                    artifact: "pythonapp"
+                    path: "$(Pipeline.Workspace)/pythonapp"
+                  displayName: "Download Artifact"
 
-        # Create ZIP Package
+                # Deploy to Green Slot
 
-        - task: ArchiveFiles@2
-          inputs:
-            rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
-            includeRootFolder: false
-            archiveType: 'zip'
-            archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
-            replaceExistingArchive: true
-          displayName: 'Create Application ZIP'
+                - task: AzureWebApp@1
+                  inputs:
+                    azureSubscription: "$(azureServiceConnection)"
+                    appType: "webAppLinux"
+                    appName: "$(webAppName)"
 
+                    deployToSlotOrASE: true
 
-        # Publish Artifact
+                    resourceGroupName: "$(resourceGroupName)"
 
-        - task: PublishPipelineArtifact@1
-          inputs:
-            targetPath: '$(Build.ArtifactStagingDirectory)/app.zip'
-            artifact: 'pythonapp'
-          displayName: 'Publish Artifact'
+                    slotName: "$(slotName)"
 
+                    package: "$(Pipeline.Workspace)/pythonapp/app.zip"
 
+                    runtimeStack: "PYTHON|3.14"
 
-# -------------------------------------------------------
-# Stage 2 - Deploy to Green Slot
-# -------------------------------------------------------
+                  displayName: "Deploy to Green Slot"
 
-- stage: DeployGreen
-  displayName: 'Deploy to Green Slot'
+  # -------------------------------------------------------
+  # Stage 3 - Test Green Slot
+  # -------------------------------------------------------
 
-  dependsOn: Build
+  - stage: TestGreen
+    displayName: "Test Green Slot"
 
-  jobs:
+    dependsOn: DeployGreen
 
-    - deployment: DeployGreenSlot
-      displayName: 'Deploy Green Version'
+    jobs:
+      - job: TestGreenApp
+        displayName: "Test Green Application"
 
-      environment: 'green'
+        steps:
+          - script: |
+              echo "Testing Green Slot"
 
-      strategy:
+              curl -f https://$(webAppName)-$(slotName).azurewebsites.net
 
-        runOnce:
+            displayName: "Health Check Green Slot"
 
-          deploy:
+  # -------------------------------------------------------
+  # Stage 4 - Swap Green to Production
+  # -------------------------------------------------------
 
-            steps:
+  - stage: Swap
+    displayName: "Swap Green to Production"
 
+    dependsOn: TestGreen
 
-              # Download Build Artifact
+    jobs:
+      - deployment: SwapSlots
+        displayName: "Swap Deployment Slots"
 
-              - task: DownloadPipelineArtifact@2
-                inputs:
-                  artifact: 'pythonapp'
-                  path: '$(Pipeline.Workspace)/pythonapp'
-                displayName: 'Download Artifact'
+        environment: "production"
 
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureAppServiceManage@0
 
-              # Deploy to Green Slot
+                  inputs:
+                    azureSubscription: "$(azureServiceConnection)"
 
-              - task: AzureWebApp@1
-                inputs:
-                  azureSubscription: '$(azureServiceConnection)'
-                  appType: 'webAppLinux'
-                  appName: '$(webAppName)'
+                    Action: "Swap Slots"
 
-                  deployToSlotOrASE: true
+                    WebAppName: "$(webAppName)"
 
-                  resourceGroupName: '$(resourceGroupName)'
+                    ResourceGroupName: "$(resourceGroupName)"
 
-                  slotName: '$(slotName)'
+                    SourceSlot: "$(slotName)"
 
-                  package: '$(Pipeline.Workspace)/pythonapp/app.zip'
+                    SwapWithProduction: true
 
-                  runtimeStack: 'PYTHON|3.14'
+                  displayName: "Swap Green to Production"
 
-                displayName: 'Deploy to Green Slot'
+  # -------------------------------------------------------
+  # Stage 5 - Verify Production
+  # -------------------------------------------------------
 
+  - stage: VerifyProduction
+    displayName: "Verify Production"
 
+    dependsOn: Swap
 
-# -------------------------------------------------------
-# Stage 3 - Test Green Slot
-# -------------------------------------------------------
+    jobs:
+      - job: VerifyApp
 
-- stage: TestGreen
-  displayName: 'Test Green Slot'
+        steps:
+          - script: |
 
-  dependsOn: DeployGreen
+              echo "Testing Production Application"
 
-  jobs:
+              curl -f https://$(webAppName).azurewebsites.net
 
-    - job: TestGreenApp
-      displayName: 'Test Green Application'
-
-      steps:
-
-        - script: |
-            echo "Testing Green Slot"
-
-            curl -f https://$(webAppName)-$(slotName).azurewebsites.net
-
-          displayName: 'Health Check Green Slot'
-
-
-
-# -------------------------------------------------------
-# Stage 4 - Swap Green to Production
-# -------------------------------------------------------
-
-- stage: Swap
-  displayName: 'Swap Green to Production'
-
-  dependsOn: TestGreen
-
-  jobs:
-
-    - deployment: SwapSlots
-      displayName: 'Swap Deployment Slots'
-
-      environment: 'production'
-
-      strategy:
-
-        runOnce:
-
-          deploy:
-
-            steps:
-
-
-              - task: AzureAppServiceManage@0
-
-                inputs:
-
-                  azureSubscription: '$(azureServiceConnection)'
-
-                  Action: 'Swap Slots'
-
-                  WebAppName: '$(webAppName)'
-
-                  ResourceGroupName: '$(resourceGroupName)'
-
-                  SourceSlot: '$(slotName)'
-
-                  SwapWithProduction: true
-
-                displayName: 'Swap Green to Production'
-
-
-
-# -------------------------------------------------------
-# Stage 5 - Verify Production
-# -------------------------------------------------------
-
-- stage: VerifyProduction
-  displayName: 'Verify Production'
-
-  dependsOn: Swap
-
-  jobs:
-
-    - job: VerifyApp
-
-      steps:
-
-        - script: |
-
-            echo "Testing Production Application"
-
-            curl -f https://$(webAppName).azurewebsites.net
-
-          displayName: 'Test Production'
+            displayName: "Test Production"
