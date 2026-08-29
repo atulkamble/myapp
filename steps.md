@@ -27,7 +27,7 @@ green - staging
 3. create azure webapp >> select repo >> deployment center >> main - production 
 https://myapp1234-g0a7ezc8c8axe7cu.canadacentral-01.azurewebsites.net/
 
-4. create slot >> green (sstaging) 
+4. create slot >> green (staging) 
 https://myapp1234-green-hdf9dhcwe6fmctft.canadacentral-01.azurewebsites.net/
 
 5. slot swap >>
