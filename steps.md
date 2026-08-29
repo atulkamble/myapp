@@ -71,17 +71,12 @@ zip -r blue-app.zip . -x "*.git*"
 
 // Deploy to Production / Blue Slot
 
-az webapp deploy \
---resource-group myRG \
---name mypythonapp98600 \
---src-path blue-app.zip \
---type zip
+az webapp deploy --resource-group myRG --name mypythonapp98600 --src-path blue-app.zip --type zip
 
 
 // Verify Production
 
 az webapp browse --resource-group myRG --name mypythonapp98600
-
 
 
 // -------------------------------------------------------
@@ -91,27 +86,17 @@ az webapp browse --resource-group myRG --name mypythonapp98600
 
 // Create Green Slot
 
-az webapp deployment slot create \
---name mypythonapp98600 \
---resource-group myRG \
---slot green
+az webapp deployment slot create --name mypythonapp98600 --resource-group myRG --slot green
 
 
 // List Slots
 
-az webapp deployment slot list \
---name mypythonapp98600 \
---resource-group myRG \
--o table
+az webapp deployment slot list --name mypythonapp98600 --resource-group myRG -o table
 
 
 // Verify Green Slot
 
-az webapp show \
---name mypythonapp98600 \
---resource-group myRG \
---slot green \
--o table
+az webapp show --name mypythonapp98600 --resource-group myRG --slot green -o table
 
 
 // -------------------------------------------------------
@@ -152,29 +137,17 @@ zip -r green-app.zip . -x "*.git*" "blue-app.zip"
 // Deploy Application to Green Slot
 // -------------------------------------------------------
 
-az webapp deploy \
---resource-group myRG \
---name mypythonapp98600 \
---slot green \
---src-path green-app.zip \
---type zip
+az webapp deploy --resource-group myRG --name mypythonapp98600 --slot green --src-path green-app.zip --type zip
 
 
 // Verify Green Slot
 
-az webapp show \
---resource-group myRG \
---name mypythonapp98600 \
---slot green \
--o table
+az webapp show --resource-group myRG --name mypythonapp98600 --slot green -o table
 
 
 // Open Green Slot
 
-az webapp browse \
---resource-group myRG \
---name mypythonapp98600 \
---slot green
+az webapp browse --resource-group myRG --name mypythonapp98600 --slot green
 
 
 // -------------------------------------------------------
@@ -369,3 +342,5 @@ https://myapp1234-green-hdf9dhcwe6fmctft.canadacentral-01.azurewebsites.net/
 
 // issue >> swap again >> rollback
 ```
+
+
